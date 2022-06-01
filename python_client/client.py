@@ -3,6 +3,8 @@ from pySerialTransfer import pySerialTransfer as txfer
 
 from enum import Enum
 
+from setuptools import Command
+
 class ResponseId(Enum):
     AVAILABLE_BUFFER = 0
 
@@ -10,6 +12,8 @@ class CommandId(Enum):
     APPEND = 0
     GET_AVAILABLE_BUFFER = 1
     PRIME = 2
+    START_PRINT = 3
+    STOP_PRINT = 4
 
 
 class InkjetController:
@@ -31,22 +35,29 @@ class InkjetController:
                     print('ERROR: {}'.format(self.link.status))
                 break
 
-    def askBufferAvailable(self):
-        print("asked for available buffers")
+    def sendEmptyCommand(self, code):
         sendSize = self.link.tx_obj(0, start_pos=0, val_type_override='B')
-        if not self.link.send(sendSize, packet_id=CommandId.GET_AVAILABLE_BUFFER.value):
+        if not self.link.send(sendSize, packet_id=code):
             raise Exception("Couldn't send message")
 
+    def startPrint(self):
+        self.sendEmptyCommand(CommandId.START_PRINT.value)
+
+    def stopPrint(self):
+        self.sendEmptyCommand(CommandId.STOP_PRINT.value)
+
+    def askBufferAvailable(self):
+       self.sendEmptyCommand(CommandId.GET_AVAILABLE_BUFFER.value)
+
     def prime(self):
-        sendSize = self.link.tx_obj(0, start_pos=0, val_type_override='B')
-        self.link.send(sendSize, packet_id=CommandId.PRIME.value)
+        self.sendEmptyCommand(CommandId.PRIME.value)
 
     def forceSendOneLine(self, line):
         """sends one line, but without checking
         """
         sendSize = 0
         for elt in line:
-            sendSize = self.link.tx_obj(elt, start_pos=sendSize, val_type_override='B')
+            sendSize = self.link.tx_obj(elt, start_pos=sendSize, val_type_override='H')
         self.link.send(sendSize, packet_id=CommandId.APPEND.value)
         print("sent line")
         self.available -= 1
@@ -103,15 +114,21 @@ if __name__ == '__main__':
             ctl.prime()
             time.sleep(1)
 
-        # while True:
-        #     time.sleep(0.02)
-        #     line = [index]*38
-        #     print(f"sending: {index}")
-        #     ctl.sendOneLine(line, blocking=True)
-        #     ctl.update()
-        #     index += 1
+        ctl.startPrint()
+        while True:
+            for i in range(255):
+                time.sleep(0.02)
+                line = [index]*22
+                print(f"sending: {index}")
+                ctl.sendOneLine(line, blocking=True)
+                ctl.update()
+                index += 1
 
     except KeyboardInterrupt:
+        line = [0]*22
+        ctl.sendOneLine(line, blocking=True)
+        ctl.update()
+        ctl.stopPrint()
         ctl.close()
 
     except:

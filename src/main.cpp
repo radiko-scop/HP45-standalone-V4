@@ -10,7 +10,7 @@
 SerialTransfer myTransfer;
 
 typedef struct {
-  uint8_t data[38];
+  uint16_t data[22];
 } InkLine;
 
 // uint32_t px_position = floor((double) microns / 42.333333333333336)
@@ -36,8 +36,11 @@ uint8_t portDWrite[dmaBufferSize]; //stores data for port D editing
 
 DMAPrint dmaHP45(dmaBufferSize, portCMemory, portDMemory, portCWrite, portDWrite, dmaFrequency); //init the dma library
 
-
 #define CODE_BUFFER_AVAILABLE 0
+
+int SpeedPx = 2362; // pixel/s, ie ~10mm/s
+int PixelPeriod = 423; // microseconds
+IntervalTimer myTimer;
 
 void flushOneByte()
 {
@@ -55,6 +58,26 @@ void prime()
   dmaHP45.SetEnable(1); //temporarily enable head
   dmaHP45.Prime(100);
   dmaHP45.SetEnable(0); //temporarily enable head
+}
+
+volatile bool sendAvailableSpace = false;
+
+void setAvailableSpaceFlag(void)
+{
+    sendAvailableSpace = true;
+}
+
+void startPrinting()
+{
+  flushOneByte(); // always one byte of payload, even if unused...
+  Serial1.println("Starting printing");
+  myTimer.begin(setAvailableSpaceFlag, PixelPeriod);
+}
+
+void stopPrinting()
+{
+  flushOneByte();
+  myTimer.end();
 }
 
 void getBufferAvailable()
@@ -103,21 +126,15 @@ void appendToBuffer()
   }
 }
 
-volatile bool sendAvailableSpace = false;
-
-IntervalTimer myTimer;
-
-void setAvailableSpaceFlag(void)
-{
-    sendAvailableSpace = true;
-}
-
 void doSendAvailableSpace(void)
 {
   if(!InkJetBuffer.isEmpty())
   {
-    InkJetBuffer.shift();
-    Serial1.println("Shifted one line");
+    InkLine currentBurst = InkJetBuffer.shift();
+    dmaHP45.SetEnable(1); //enable the head
+    dmaHP45.SetBurst(currentBurst.data, 1);
+    dmaHP45.Burst(); //burst the printhead
+    Serial1.println("Buuurst !");
   }
   //buffer.burst values if any, zeros else.
   uint16_t sendSize = 0;
@@ -127,7 +144,7 @@ void doSendAvailableSpace(void)
 }
 
 // supplied as a reference - persistent allocation required
-const functionPtr callbackArr[] = { appendToBuffer, getBufferAvailable, prime };
+const functionPtr callbackArr[] = { appendToBuffer, getBufferAvailable, prime, startPrinting, stopPrinting };
 ///////////////////////////////////////////////////////////////////
 
 void setup()
@@ -145,8 +162,6 @@ void setup()
   /////////////////////////////////////////////////////////////////
 
   myTransfer.begin(Serial, myConfig);
-
-  myTimer.begin(setAvailableSpaceFlag, 150000);  // blinkLED to run every 0.15 seconds
 
   Serial1.println(F("Ready - setup finished"));
 }
