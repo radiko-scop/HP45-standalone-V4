@@ -6,27 +6,40 @@ from enum import Enum
 class ResponseId(Enum):
     AVAILABLE_BUFFER = 0
 
+class CommandId(Enum):
+    APPEND = 0
+    GET_AVAILABLE_BUFFER = 1
+    PRIME = 2
+
+
 class InkjetController:
 
-    # def waitAnswer(self, id):
-    #       while True:
-    #         if self.link.available():
-    #             self.callback_list()[self.link.idByte]()
-    #             if(self.link.idByte == id):
-    #                 break
-    #         elif self.link.status < 0:
-    #             if self.link.status == txfer.CRC_ERROR:
-    #                 print('ERROR: CRC_ERROR')
-    #             elif self.link.status == txfer.PAYLOAD_ERROR:
-    #                 print('ERROR: PAYLOAD_ERROR')
-    #             elif self.link.status == txfer.STOP_BYTE_ERROR:
-    #                 print('ERROR: STOP_BYTE_ERROR')
-    #             else:
-    #                 print('ERROR: {}'.format(self.link.status))
-    #             break
+    def waitFor(self, id):
+        while True:
+            if self.link.available():
+                self.callback_list()[self.link.idByte]()
+                if(self.link.idByte == id):
+                    break
+            elif self.link.status < 0:
+                if self.link.status == txfer.CRC_ERROR:
+                    print('ERROR: CRC_ERROR')
+                elif self.link.status == txfer.PAYLOAD_ERROR:
+                    print('ERROR: PAYLOAD_ERROR')
+                elif self.link.status == txfer.STOP_BYTE_ERROR:
+                    print('ERROR: STOP_BYTE_ERROR')
+                else:
+                    print('ERROR: {}'.format(self.link.status))
+                break
 
     def askBufferAvailable(self):
-        self.link.send(0, packet_id=1)
+        print("asked for available buffers")
+        sendSize = self.link.tx_obj(0, start_pos=0, val_type_override='B')
+        if not self.link.send(sendSize, packet_id=CommandId.GET_AVAILABLE_BUFFER.value):
+            raise Exception("Couldn't send message")
+
+    def prime(self):
+        sendSize = self.link.tx_obj(0, start_pos=0, val_type_override='B')
+        self.link.send(sendSize, packet_id=CommandId.PRIME.value)
 
     def forceSendOneLine(self, line):
         """sends one line, but without checking
@@ -34,13 +47,15 @@ class InkjetController:
         sendSize = 0
         for elt in line:
             sendSize = self.link.tx_obj(elt, start_pos=sendSize, val_type_override='B')
-        self.link.send(sendSize, packet_id=0)
+        self.link.send(sendSize, packet_id=CommandId.APPEND.value)
+        print("sent line")
         self.available -= 1
 
     def sendOneLine(self, line, blocking=True):
         """
         """
         if self.available <= 0:
+            print("0 available !")
             return False
 
         print(f"sending line since available is: {self.available}")
@@ -53,14 +68,6 @@ class InkjetController:
         self.available = self.link.rx_obj(obj_type='h', start_pos=0)
         print('ATMEGA says there are {} lines available left in buffer'.format(self.available))
 
-    def primeCallback(self):
-        pass
-
-    def setSpeedCallback(self):
-        pass
-
-    def startTriggerCallback(self):
-        pass
 
     '''
     list of callback functions to be called during tick. The index of the function
@@ -69,7 +76,7 @@ class InkjetController:
     would write the callback list with "hi" being in the 0th place of the list:
     '''
     def callback_list(self):
-        return [ self.availableBufferCallback, self.primeCallback, self.setSpeedCallback, self.startTriggerCallback ]
+        return [ self.availableBufferCallback ]
 
     def update(self):
         self.link.tick()
@@ -84,17 +91,25 @@ class InkjetController:
             raise Exception("Failed to open port")
         self.available = 0
         self.askBufferAvailable()
+        self.waitFor(ResponseId.AVAILABLE_BUFFER.value)
 
 if __name__ == '__main__':
     try:
         ctl = InkjetController('/dev/ttyACM0')
         time.sleep(2)
         index = 0
-        while True:
-            time.sleep(0.02)
-            line = [index]*38
-            ctl.sendOneLine(line, blocking=True)
-            ctl.update()
+        for _ in range(5):
+            print('prime!')
+            ctl.prime()
+            time.sleep(1)
+
+        # while True:
+        #     time.sleep(0.02)
+        #     line = [index]*38
+        #     print(f"sending: {index}")
+        #     ctl.sendOneLine(line, blocking=True)
+        #     ctl.update()
+        #     index += 1
 
     except KeyboardInterrupt:
         ctl.close()

@@ -1,19 +1,11 @@
 #include <Arduino.h>
 #include <assert.h>
 #include <SerialTransfer.h>
+#include "DMAPrint.h"
+#include "IntervalTimer.h"
 
 #define CIRCULAR_BUFFER_INT_SAFE // safe interrupts
 #include <CircularBuffer.h>
-
-#define TIMER_INTERRUPT_DEBUG         0
-#define _TIMERINTERRUPT_LOGLEVEL_     0
-
-#define USE_TIMER_1     true
-
-// To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
-#include "TimerInterrupt.h"
-
-#define TIMER1_INTERVAL_MS    1000
 
 SerialTransfer myTransfer;
 
@@ -32,14 +24,48 @@ typedef struct {
  */
 CircularBuffer<InkLine, 100> InkJetBuffer;
 
+
+//for DMA
+const uint32_t dmaBufferSize = 320; //242 max theoretical, the actual size of the DMA buffer (takes data per 2 bytes, 1 per port)
+const uint32_t dmaFrequency = 1050000; //the frequency in hertz the buffer should update at
+
+DMAMEM uint8_t portCMemory[dmaBufferSize]; //stores data for port C DMA
+DMAMEM uint8_t portDMemory[dmaBufferSize]; //stores data for port D DMA
+uint8_t portCWrite[dmaBufferSize]; //stores data for port C editing
+uint8_t portDWrite[dmaBufferSize]; //stores data for port D editing
+
+DMAPrint dmaHP45(dmaBufferSize, portCMemory, portDMemory, portCWrite, portDWrite, dmaFrequency); //init the dma library
+
+
 #define CODE_BUFFER_AVAILABLE 0
+
+void flushOneByte()
+{
+ // trick to avoid PAYLOAD ERROR, since a null payload is considered an error
+  uint16_t recSize = 0;
+  uint8_t unused = 0;
+  recSize = myTransfer.rxObj(unused, recSize);
+
+}
+
+void prime()
+{
+  Serial1.println("Prime");
+  flushOneByte(); // always one byte of payload, even if unused...
+  dmaHP45.SetEnable(1); //temporarily enable head
+  dmaHP45.Prime(100);
+  dmaHP45.SetEnable(0); //temporarily enable head
+}
 
 void getBufferAvailable()
 {
+  flushOneByte(); // always one byte of payload, even if unused...
+  Serial1.println("Getting available buffers");
   uint16_t sendSize = 0;
   sendSize = myTransfer.txObj<int16_t>(InkJetBuffer.available(), sendSize);
   myTransfer.sendData(sendSize, CODE_BUFFER_AVAILABLE);
 }
+
 void appendToBuffer()
 {
   if (InkJetBuffer.available() > 0)
@@ -47,6 +73,7 @@ void appendToBuffer()
     InkLine line;
     memset(&line, 0, sizeof(line));
     uint16_t recSize = 0;
+    Serial1.println("Going to receive");
     recSize = myTransfer.rxObj(line.data, recSize);
     Serial1.print("Size Received: ");
     Serial1.print(recSize);
@@ -60,10 +87,11 @@ void appendToBuffer()
     //     // sendSize = myTransfer.txObj<int16_t>(-2, sendSize);
     //     // myTransfer.sendData(sendSize, 0);
 
-    //     Serial1.print("Received: ");
-    //     Serial1.print(i);
-    //     Serial1.print("value: ");
-    //     Serial1.println(line.data[i]);
+        // Serial1.print("Received: ");
+        // Serial1.print(i);
+        // Serial1.print("value: ");
+        // Serial1.println(line.data[i]);
+
 
     // }
     InkJetBuffer.push(line);
@@ -75,22 +103,37 @@ void appendToBuffer()
   }
 }
 
-void TimerHandler1(void)
+volatile bool sendAvailableSpace = false;
+
+IntervalTimer myTimer;
+
+void setAvailableSpaceFlag(void)
 {
-  InkJetBuffer.shift();
-  Serial1.println("Shifted one line");
+    sendAvailableSpace = true;
+}
+
+void doSendAvailableSpace(void)
+{
+  if(!InkJetBuffer.isEmpty())
+  {
+    InkJetBuffer.shift();
+    Serial1.println("Shifted one line");
+  }
+  //buffer.burst values if any, zeros else.
   uint16_t sendSize = 0;
   sendSize = myTransfer.txObj<int16_t>(InkJetBuffer.available(), sendSize);
   myTransfer.sendData(sendSize, CODE_BUFFER_AVAILABLE);
+  sendAvailableSpace = false;
 }
 
-
 // supplied as a reference - persistent allocation required
-const functionPtr callbackArr[] = { appendToBuffer, getBufferAvailable };
+const functionPtr callbackArr[] = { appendToBuffer, getBufferAvailable, prime };
 ///////////////////////////////////////////////////////////////////
 
 void setup()
 {
+  dmaHP45.begin();
+
   Serial.begin(115200);
   Serial1.begin(115200);
 
@@ -103,22 +146,20 @@ void setup()
 
   myTransfer.begin(Serial, myConfig);
 
-  ITimer1.init();
+  myTimer.begin(setAvailableSpaceFlag, 150000);  // blinkLED to run every 0.15 seconds
 
-  // Using ATmega328 used in UNO => 16MHz CPU clock ,
-  // For 16-bit timer 1, 3, 4 and 5, set frequency from 0.2385 to some KHz
-  // For 8-bit timer 2 (prescaler up to 1024, set frequency from 61.5Hz to some KHz
-
-  if (ITimer1.attachInterruptInterval(TIMER1_INTERVAL_MS, TimerHandler1))
-  {
-    Serial.print(F("Starting  ITimer1 OK, millis() = ")); Serial.println(millis());
-  }
-  else
-    Serial.println(F("Can't set ITimer1. Select another freq. or timer"));
+  Serial1.println(F("Ready - setup finished"));
 }
-
 
 void loop()
 {
+  noInterrupts();
   myTransfer.tick();
+  bool sendAvailableSpaceCopy = sendAvailableSpace;
+  interrupts();
+
+  if(sendAvailableSpaceCopy)
+  {
+    doSendAvailableSpace();
+  }
 }
