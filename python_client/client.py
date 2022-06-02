@@ -1,10 +1,8 @@
 import time
 from pySerialTransfer import pySerialTransfer as txfer
+from ImageConverter2 import ImageSlicer
 
 from enum import Enum
-
-from setuptools import Command
-
 class ResponseId(Enum):
     AVAILABLE_BUFFER = 0
 
@@ -17,6 +15,31 @@ class CommandId(Enum):
 
 
 class InkjetController:
+
+    def openImage(self, path):
+         self.imageSlicer = ImageSlicer(path)
+
+    def _printSweep(self, sweep):
+        index = 0
+        for line in sweep:
+            success = False
+            while not success:
+                success = self.sendOneLine(line)
+                if not success:
+                    print("fail ...")
+                    time.sleep(0.02)
+                    self.askBufferAvailable()
+                    self.waitFor(ResponseId.AVAILABLE_BUFFER.value)
+                print(f"sent line {index}")
+            index += 1
+
+    def print(self):
+        self.startPrint()
+        sweep_index = 0
+        for sweep in self.imageSlicer.imageSweeps(packed=True):
+            print(f"Processing sweep {sweep_index}, lines in sweep : {len(sweep)}")
+            self._printSweep(sweep)
+            sweep_index += 1
 
     def waitFor(self, id):
         while True:
@@ -57,22 +80,17 @@ class InkjetController:
         """
         sendSize = 0
         for elt in line:
-            sendSize = self.link.tx_obj(elt, start_pos=sendSize, val_type_override='H')
+            sendSize = self.link.tx_obj(elt, start_pos=sendSize, val_type_override='B')
         self.link.send(sendSize, packet_id=CommandId.APPEND.value)
-        print("sent line")
         self.available -= 1
 
-    def sendOneLine(self, line, blocking=True):
-        """
-        """
+    def sendOneLine(self, line):
         if self.available <= 0:
-            print("0 available !")
+            # print("0 available !")
             return False
 
-        print(f"sending line since available is: {self.available}")
+        # print(f"sending line since available is: {self.available}")
         self.forceSendOneLine(line)
-        # if blocking:
-        #     self.waitAnswer(ResponseId.AVAILABLE_BUFFER.value)
         return True
 
     def availableBufferCallback(self):
@@ -97,7 +115,7 @@ class InkjetController:
 
     def __init__(self, port):
         self.link = txfer.SerialTransfer(port)
-        self.link.set_callbacks(self.callback_list())
+        # self.link.set_callbacks(self.callback_list())
         if not self.link.open():
             raise Exception("Failed to open port")
         self.available = 0
@@ -106,27 +124,32 @@ class InkjetController:
 
 if __name__ == '__main__':
     try:
-        ctl = InkjetController('/dev/ttyACM0')
+        import sys
+        ctl = InkjetController(sys.argv[1])
         time.sleep(2)
         index = 0
         for _ in range(5):
             print('prime!')
             ctl.prime()
             time.sleep(1)
+        #ctl.openImage('test600dpi.png')
+        ctl.openImage('ytec_logo_icon.png')
+        print("image opened")
+        ctl.print()
 
-        ctl.startPrint()
-        while True:
-            for i in range(255):
-                time.sleep(0.02)
-                line = [index]*22
-                print(f"sending: {index}")
-                ctl.sendOneLine(line, blocking=True)
-                ctl.update()
-                index += 1
+        # ctl.startPrint()
+        # while True:
+        #     for i in range(255):
+        #         time.sleep(0.02)
+        #         line = [index]*22
+        #         print(f"sending: {index}")
+        #         ctl.sendOneLine(line)
+        #         ctl.update()
+        #         index += 1
 
     except KeyboardInterrupt:
-        line = [0]*22
-        ctl.sendOneLine(line, blocking=True)
+        line = [0]*38
+        ctl.sendOneLine(line)
         ctl.update()
         ctl.stopPrint()
         ctl.close()

@@ -51,7 +51,7 @@ class DMAPrint {
     void SingleNozzle(uint16_t temp_nozzle);
     int8_t Preheat(uint16_t temp_pulses);
     int8_t Prime(uint16_t temp_pulses);
-    uint8_t TestAddress(void); 
+    uint8_t TestAddress(void);
 
     void Burst(void);
     int busy(void);
@@ -72,7 +72,7 @@ class DMAPrint {
     uint32_t GetVoltageLogic(void);
     uint32_t GetVoltageHead(void);
     uint32_t GetVoltageAddress(void);
-    
+
     void SetPrimitiveClock(uint8_t tempState);
     void SetPrimitivePins(uint16_t tempState);
     void SetAddressClock(uint8_t tempState);

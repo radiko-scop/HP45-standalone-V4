@@ -10,8 +10,10 @@
 SerialTransfer myTransfer;
 
 typedef struct {
-  uint16_t data[22];
+  uint8_t data[38];
 } InkLine;
+
+uint16_t DataBurst[22]; //the printing burst for decoding
 
 // uint32_t px_position = floor((double) microns / 42.333333333333336)
 
@@ -96,27 +98,12 @@ void appendToBuffer()
     InkLine line;
     memset(&line, 0, sizeof(line));
     uint16_t recSize = 0;
-    Serial1.println("Going to receive");
+    // Serial1.println("Going to receive");
     recSize = myTransfer.rxObj(line.data, recSize);
-    Serial1.print("Size Received: ");
-    Serial1.print(recSize);
-    Serial1.print(" value: ");
-    Serial1.println(line.data[0]);
-
-    // for(int i=0; i< 38; i++)
-    // {
-
-    //     // uint16_t sendSize = 0;
-    //     // sendSize = myTransfer.txObj<int16_t>(-2, sendSize);
-    //     // myTransfer.sendData(sendSize, 0);
-
-        // Serial1.print("Received: ");
-        // Serial1.print(i);
-        // Serial1.print("value: ");
-        // Serial1.println(line.data[i]);
-
-
-    // }
+    // Serial1.print("Size Received: ");
+    // Serial1.print(recSize);
+    // Serial1.print(" value: ");
+    // Serial1.println(line.data[0]);
     InkJetBuffer.push(line);
 
   }else{
@@ -126,21 +113,27 @@ void appendToBuffer()
   }
 }
 
+int burstCount = 0;
 void doSendAvailableSpace(void)
 {
   if(!InkJetBuffer.isEmpty())
   {
     InkLine currentBurst = InkJetBuffer.shift();
     dmaHP45.SetEnable(1); //enable the head
-    dmaHP45.SetBurst(currentBurst.data, 1);
+    dmaHP45.ConvertB8ToBurst(currentBurst.data, DataBurst);
+    dmaHP45.SetBurst(DataBurst, 1);
     dmaHP45.Burst(); //burst the printhead
-    Serial1.println("Buuurst !");
+    Serial1.print("Buuurst ");
+    Serial1.print(burstCount);
+    Serial1.println(" !");
+    burstCount++;
   }
-  //buffer.burst values if any, zeros else.
-  uint16_t sendSize = 0;
-  sendSize = myTransfer.txObj<int16_t>(InkJetBuffer.available(), sendSize);
-  myTransfer.sendData(sendSize, CODE_BUFFER_AVAILABLE);
-  sendAvailableSpace = false;
+  // Serial1.println("Returning size !");
+  // //buffer.burst values if any, zeros else.
+  // uint16_t sendSize = 0;
+  // sendSize = myTransfer.txObj<int16_t>(InkJetBuffer.available(), sendSize);
+  // myTransfer.sendData(sendSize, CODE_BUFFER_AVAILABLE);
+  // sendAvailableSpace = false;
 }
 
 // supplied as a reference - persistent allocation required

@@ -248,7 +248,7 @@ void DMAPrint::begin(void) {
   //set primitives and address to 0
   //SetPrimitiveClock(1);
   //delayMicroseconds(2);
-  //SetPrimitiveClock(0); 
+  //SetPrimitiveClock(0);
   //AddressReset();
 
 #if defined(__MK20DX128__)
@@ -589,7 +589,7 @@ void DMAPrint::SetBurst(uint16_t temp_input[22], uint8_t temp_mode) { //takes a 
 //takes an empty uint8_t array of 300 as an input for nozzles and returns the state of each nozzle (0 for broken, 1 for working)
 //takes an empty uint8_t array of 22 as input for addresses and returns the number of working nozzles on each address
 //takes an empty uint8_t array of 14 as input for the primitives, and returns the number of working nozzles on each primitive
-void DMAPrint::TestHead(uint8_t* tempNozzleState, uint8_t* tempAddressState, uint8_t* tempPrimitiveState) { 
+void DMAPrint::TestHead(uint8_t* tempNozzleState, uint8_t* tempAddressState, uint8_t* tempPrimitiveState) {
   int16_t testPulse;
   uint8_t tempAddress, tempPrimitive;
   int8_t tempTests;
@@ -683,7 +683,7 @@ uint8_t DMAPrint::TestDummy(uint8_t tempDummy) { //test the given dummy nozzle
   SetEnable(0);
   //Serial.println(GetNozzleCheck());
   if (GetNozzleCheck() == 0) { //if capacitor was not discharged, enable is broken, return not falling
-    return 2; 
+    return 2;
   }
   return 1;
 }
@@ -1025,6 +1025,7 @@ int16_t DMAPrint::GetNozzle(uint8_t tempPrimitive, uint8_t tempAddress) { //retu
   tempAddress = constrain(tempAddress, 0, 21);
   return nozzleTableReverse[tempPrimitive][tempAddress];
 }
+
 uint16_t *DMAPrint::ConvertB6RawToBurst(uint8_t temp_input[50], uint16_t temp_burst[22]) { //takes an array of 50 bytes where the 6 LSB are nozzle on or off, starting at 0 and ending at 299 and converts to a pointed uint16_t[22] burst array
   uint16_t tempNozzle = 0; //keeps track of the current nozzle
   uint8_t temp_state; //used to write on or off to
