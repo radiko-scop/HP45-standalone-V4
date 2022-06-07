@@ -8,10 +8,26 @@
 #define CIRCULAR_BUFFER_INT_SAFE // safe interrupts
 #include <CircularBuffer.h>
 
+int positionPx = 0;
+
 SerialTransfer myTransfer;
 
-typedef struct {
-  uint8_t data[38];
+#define ROW_GAP 4050 //the distance in microns between odd and even row in long
+#define ROW_GAP_PX 96
+
+typedef struct InkLine {
+  union {
+    uint8_t data[38];
+
+    struct {
+      uint8_t odd:1;
+      uint8_t even:1;
+    } bitpair[152];
+  };
+  InkLine()
+  {
+    memset(data, 0, sizeof(data));
+  }
 } InkLine;
 
 uint16_t DataBurst[22]; //the printing burst for decoding
@@ -25,7 +41,8 @@ uint16_t DataBurst[22]; //the printing burst for decoding
  * - buffer.shift(); object from it each time you advance one pixel
  *
  */
-CircularBuffer<InkLine, 100> InkJetBuffer;
+CircularBuffer<InkLine, 300> InkJetBuffer;
+CircularBuffer<InkLine, 300> OddInkJetBuffer;
 
 //for DMA
 const uint32_t dmaBufferSize = 320; //242 max theoretical, the actual size of the DMA buffer (takes data per 2 bytes, 1 per port)
@@ -75,6 +92,7 @@ void startPrinting()
   flushOneByte(); // always one byte of payload, even if unused...
   // Serial1.println("Starting printing");
   printing = true;
+  positionPx = 0;
   // myTimer.begin(setAvailableSpaceFlag, PixelPeriod);
 }
 
@@ -118,7 +136,6 @@ void appendToBuffer()
   }
 }
 
-int burstCount = 0;
 // void doSendAvailableSpace(void)
 // {
 //   if(!InkJetBuffer.isEmpty())
@@ -174,12 +191,31 @@ void loop()
 
   if (printing && ((micros() - inkjetLastBurst) > PixelPeriod)) { //if burst is required again based on time (updated regradless of burst conditions)
     inkjetLastBurst = micros();
-    if(!InkJetBuffer.isEmpty())
+    if(!InkJetBuffer.isEmpty() || !OddInkJetBuffer.isEmpty())
     {
 
-      InkLine currentBurst = InkJetBuffer.shift();
       dmaHP45.SetEnable(1); //enable the head
-      dmaHP45.ConvertB8ToBurst(currentBurst.data, DataBurst);
+
+
+
+      if( !InkJetBuffer.isEmpty())
+      {
+        InkLine currentBurst = InkJetBuffer.shift();
+        OddInkJetBuffer.push(currentBurst);
+        dmaHP45.ConvertB8ToBurst(currentBurst.data, DataBurst, true); // set even values
+      }else{
+        InkLine empty;
+        dmaHP45.ConvertB8ToBurst(empty.data, DataBurst, true); // set odd values
+      }
+
+      if( (positionPx >= ROW_GAP_PX) && !OddInkJetBuffer.isEmpty())
+      {
+        InkLine oddCurrentBurst = OddInkJetBuffer.shift();
+        dmaHP45.ConvertB8ToBurst(oddCurrentBurst.data, DataBurst, false); // set odd values
+      }else{
+        InkLine empty;
+        dmaHP45.ConvertB8ToBurst(empty.data, DataBurst, false); // set odd values
+      }
       // int index = (burstCount * 38) % (600 * 38);
       // dmaHP45.ConvertB8ToBurst(&ytecbin00_bin[index], DataBurst);
 
@@ -188,7 +224,7 @@ void loop()
       // Serial1.print("Buuurst ");
       // Serial1.print(burstCount);
       // Serial1.println(" !");
-      burstCount++;
+      positionPx++;
     } //else
     // {
     //   // Serial1.println(F("Burst empty buffer !"));

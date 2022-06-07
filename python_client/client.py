@@ -164,7 +164,8 @@ if __name__ == '__main__':
         #     ctl.prime()
         #     time.sleep(1)
         #ctl.openImage('test600dpi.png')
-        ctl.openImage('ytec_logo_icon.png')
+        # ctl.openImage('ytec_logo_icon.png')
+        ctl.openImage('page_test.png')
         print("image opened")
         ctl.print()
 

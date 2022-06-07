@@ -1077,20 +1077,26 @@ uint16_t *DMAPrint::ConvertB6ToggleToBurst(uint8_t temp_input[50], uint16_t temp
   }
   return temp_burst;
 }
-uint16_t *DMAPrint::ConvertB8ToBurst(uint8_t temp_input[38], uint16_t temp_burst[22]) { //takes an array of 38 bytes where the 8 LSB are nozzle on or off, starting at 0 and ending at 299 and converts to a pointed uint16_t[22] burst array
+uint16_t *DMAPrint::ConvertB8ToBurst(uint8_t temp_input[38], uint16_t temp_burst[22], bool even) { //takes an array of 38 bytes where the 8 LSB are nozzle on or off, starting at 0 and ending at 299 and converts to a pointed uint16_t[22] burst array
   uint16_t tempNozzle = 0; //keeps track of the current nozzle
-  uint8_t temp_state; //used to write on or off to
+  uint8_t temp_state = 0; //used to write on or off to
   for (uint8_t B = 0; B < 38; B++) { //bytes within byte
     for (uint8_t b = 0; b < 8; b++) { //bits within byte
       for (uint8_t r = 0; r < dpiRepeat; r++) { //repeat pixels
-       if (b%2 == 1){ //TEMPORARY, ONLY PRINT ODD OR EVEN
-          temp_state = bitRead(temp_input[B], b); //get on or off from input
-        }
-        else {
-          temp_state = 0;
+        if(even)
+        {
+          if (b%2 == 0){
+            temp_state = bitRead(temp_input[B], b); //get on or off from input
+            bitWrite(temp_burst[nozzleTableAddress[tempNozzle]], nozzleTablePrimitive[tempNozzle], temp_state); //set nozzle in burst on or off
+          }
+        }else{
+          if (b%2 == 1){
+            temp_state = bitRead(temp_input[B], b); //get on or off from input
+            bitWrite(temp_burst[nozzleTableAddress[tempNozzle]], nozzleTablePrimitive[tempNozzle], temp_state); //set nozzle in burst on or off
+          }
         }
         // temp_state = bitRead(temp_input[B], b); //get on or off from input
-        bitWrite(temp_burst[nozzleTableAddress[tempNozzle]], nozzleTablePrimitive[tempNozzle], temp_state); //set nozzle in burst on or off
+        // bitWrite(temp_burst[nozzleTableAddress[tempNozzle]], nozzleTablePrimitive[tempNozzle], temp_state); //set nozzle in burst on or off
         tempNozzle ++; //add one to nozzle
       }
     }

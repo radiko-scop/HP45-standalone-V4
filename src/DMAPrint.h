@@ -87,7 +87,7 @@ class DMAPrint {
     int16_t GetNozzle(uint8_t temp_primitive, uint8_t temp_address);
     uint16_t *ConvertB6RawToBurst(uint8_t temp_input[50], uint16_t temp_burst[22]);
     uint16_t *ConvertB6ToggleToBurst(uint8_t temp_input[50], uint16_t temp_burst[22]);
-    uint16_t *ConvertB8ToBurst(uint8_t temp_input[38], uint16_t temp_burst[22]);
+    uint16_t *ConvertB8ToBurst(uint8_t temp_input[38], uint16_t temp_burst[22], bool even);
     void SetDPI(uint16_t temp_dpi);
     void DMASetPulseSplit(uint8_t tempSplit);
     uint8_t DMAGetPulseSplit(void);
