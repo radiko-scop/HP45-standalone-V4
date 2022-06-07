@@ -1083,7 +1083,13 @@ uint16_t *DMAPrint::ConvertB8ToBurst(uint8_t temp_input[38], uint16_t temp_burst
   for (uint8_t B = 0; B < 38; B++) { //bytes within byte
     for (uint8_t b = 0; b < 8; b++) { //bits within byte
       for (uint8_t r = 0; r < dpiRepeat; r++) { //repeat pixels
-        temp_state = bitRead(temp_input[B], b); //get on or off from input
+       if (b%2 == 1){ //TEMPORARY, ONLY PRINT ODD OR EVEN
+          temp_state = bitRead(temp_input[B], b); //get on or off from input
+        }
+        else {
+          temp_state = 0;
+        }
+        // temp_state = bitRead(temp_input[B], b); //get on or off from input
         bitWrite(temp_burst[nozzleTableAddress[tempNozzle]], nozzleTablePrimitive[tempNozzle], temp_state); //set nozzle in burst on or off
         tempNozzle ++; //add one to nozzle
       }

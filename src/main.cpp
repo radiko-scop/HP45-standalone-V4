@@ -2,7 +2,8 @@
 #include <assert.h>
 #include <SerialTransfer.h>
 #include "DMAPrint.h"
-#include "IntervalTimer.h"
+#include "yteclogo.h"
+// #include "IntervalTimer.h"
 
 #define CIRCULAR_BUFFER_INT_SAFE // safe interrupts
 #include <CircularBuffer.h>
@@ -26,7 +27,6 @@ uint16_t DataBurst[22]; //the printing burst for decoding
  */
 CircularBuffer<InkLine, 100> InkJetBuffer;
 
-
 //for DMA
 const uint32_t dmaBufferSize = 320; //242 max theoretical, the actual size of the DMA buffer (takes data per 2 bytes, 1 per port)
 const uint32_t dmaFrequency = 1050000; //the frequency in hertz the buffer should update at
@@ -37,12 +37,13 @@ uint8_t portCWrite[dmaBufferSize]; //stores data for port C editing
 uint8_t portDWrite[dmaBufferSize]; //stores data for port D editing
 
 DMAPrint dmaHP45(dmaBufferSize, portCMemory, portDMemory, portCWrite, portDWrite, dmaFrequency); //init the dma library
+uint32_t inkjetLastBurst = 0;
+bool printing = false;
 
 #define CODE_BUFFER_AVAILABLE 0
 
-int SpeedPx = 2362; // pixel/s, ie ~10mm/s
-int PixelPeriod = 423; // microseconds
-IntervalTimer myTimer;
+int PixelPeriod = 4233; //4233; //333; // microseconds
+// IntervalTimer myTimer;
 
 void flushOneByte()
 {
@@ -55,7 +56,7 @@ void flushOneByte()
 
 void prime()
 {
-  Serial1.println("Prime");
+  // Serial1.println("Prime");
   flushOneByte(); // always one byte of payload, even if unused...
   dmaHP45.SetEnable(1); //temporarily enable head
   dmaHP45.Prime(100);
@@ -72,20 +73,23 @@ void setAvailableSpaceFlag(void)
 void startPrinting()
 {
   flushOneByte(); // always one byte of payload, even if unused...
-  Serial1.println("Starting printing");
-  myTimer.begin(setAvailableSpaceFlag, PixelPeriod);
+  // Serial1.println("Starting printing");
+  printing = true;
+  // myTimer.begin(setAvailableSpaceFlag, PixelPeriod);
 }
 
 void stopPrinting()
 {
   flushOneByte();
-  myTimer.end();
+  InkJetBuffer.clear();
+  printing = false;
+  // myTimer.end();
 }
 
 void getBufferAvailable()
 {
   flushOneByte(); // always one byte of payload, even if unused...
-  Serial1.println("Getting available buffers");
+  // Serial1.println("Getting available buffers");
   uint16_t sendSize = 0;
   sendSize = myTransfer.txObj<int16_t>(InkJetBuffer.available(), sendSize);
   myTransfer.sendData(sendSize, CODE_BUFFER_AVAILABLE);
@@ -98,7 +102,6 @@ void appendToBuffer()
     InkLine line;
     memset(&line, 0, sizeof(line));
     uint16_t recSize = 0;
-    // Serial1.println("Going to receive");
     recSize = myTransfer.rxObj(line.data, recSize);
     // Serial1.print("Size Received: ");
     // Serial1.print(recSize);
@@ -107,6 +110,8 @@ void appendToBuffer()
     InkJetBuffer.push(line);
 
   }else{
+    // Serial1.println("Error appending to buffer !!!");
+
     // uint16_t sendSize = 0;
     // sendSize = myTransfer.txObj<int16_t>(-1, sendSize);
     // myTransfer.sendData(sendSize, 0);
@@ -114,27 +119,27 @@ void appendToBuffer()
 }
 
 int burstCount = 0;
-void doSendAvailableSpace(void)
-{
-  if(!InkJetBuffer.isEmpty())
-  {
-    InkLine currentBurst = InkJetBuffer.shift();
-    dmaHP45.SetEnable(1); //enable the head
-    dmaHP45.ConvertB8ToBurst(currentBurst.data, DataBurst);
-    dmaHP45.SetBurst(DataBurst, 1);
-    dmaHP45.Burst(); //burst the printhead
-    Serial1.print("Buuurst ");
-    Serial1.print(burstCount);
-    Serial1.println(" !");
-    burstCount++;
-  }
-  // Serial1.println("Returning size !");
-  // //buffer.burst values if any, zeros else.
-  // uint16_t sendSize = 0;
-  // sendSize = myTransfer.txObj<int16_t>(InkJetBuffer.available(), sendSize);
-  // myTransfer.sendData(sendSize, CODE_BUFFER_AVAILABLE);
-  // sendAvailableSpace = false;
-}
+// void doSendAvailableSpace(void)
+// {
+//   if(!InkJetBuffer.isEmpty())
+//   {
+//     InkLine currentBurst = InkJetBuffer.shift();
+//     dmaHP45.SetEnable(1); //enable the head
+//     dmaHP45.ConvertB8ToBurst(currentBurst.data, DataBurst);
+//     dmaHP45.SetBurst(DataBurst, 1);
+//     dmaHP45.Burst(); //burst the printhead
+//     Serial1.print("Buuurst ");
+//     Serial1.print(burstCount);
+//     Serial1.println(" !");
+//     burstCount++;
+//   }
+//   // Serial1.println("Returning size !");
+//   // //buffer.burst values if any, zeros else.
+//   // uint16_t sendSize = 0;
+//   // sendSize = myTransfer.txObj<int16_t>(InkJetBuffer.available(), sendSize);
+//   // myTransfer.sendData(sendSize, CODE_BUFFER_AVAILABLE);
+//   // sendAvailableSpace = false;
+// }
 
 // supplied as a reference - persistent allocation required
 const functionPtr callbackArr[] = { appendToBuffer, getBufferAvailable, prime, startPrinting, stopPrinting };
@@ -145,7 +150,7 @@ void setup()
   dmaHP45.begin();
 
   Serial.begin(115200);
-  Serial1.begin(115200);
+  // Serial1.begin(115200);
 
   ///////////////////////////////////////////////////////////////// Config Parameters
   configST myConfig;
@@ -156,18 +161,45 @@ void setup()
 
   myTransfer.begin(Serial, myConfig);
 
-  Serial1.println(F("Ready - setup finished"));
+  // Serial1.println(F("Ready - setup finished"));
+  printing = true;
 }
 
 void loop()
 {
-  noInterrupts();
+  // noInterrupts();
   myTransfer.tick();
-  bool sendAvailableSpaceCopy = sendAvailableSpace;
-  interrupts();
+  // bool sendAvailableSpaceCopy = sendAvailableSpace;
+  // interrupts();
 
-  if(sendAvailableSpaceCopy)
-  {
-    doSendAvailableSpace();
+  if (printing && ((micros() - inkjetLastBurst) > PixelPeriod)) { //if burst is required again based on time (updated regradless of burst conditions)
+    inkjetLastBurst = micros();
+    if(!InkJetBuffer.isEmpty())
+    {
+
+      InkLine currentBurst = InkJetBuffer.shift();
+      dmaHP45.SetEnable(1); //enable the head
+      dmaHP45.ConvertB8ToBurst(currentBurst.data, DataBurst);
+      // int index = (burstCount * 38) % (600 * 38);
+      // dmaHP45.ConvertB8ToBurst(&ytecbin00_bin[index], DataBurst);
+
+      dmaHP45.SetBurst(DataBurst, 1);
+      dmaHP45.Burst(); //burst the printhead
+      // Serial1.print("Buuurst ");
+      // Serial1.print(burstCount);
+      // Serial1.println(" !");
+      burstCount++;
+    } //else
+    // {
+    //   // Serial1.println(F("Burst empty buffer !"));
+    // }
   }
+  else {
+    // dmaHP45.SetEnable(0); //disable the head
+  }
+
+  // if(sendAvailableSpaceCopy)
+  // {
+  //   doSendAvailableSpace();
+  // }
 }

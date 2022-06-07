@@ -1,6 +1,8 @@
 import time
 from pySerialTransfer import pySerialTransfer as txfer
 from ImageConverter2 import ImageSlicer
+from OPSerialGRBL import GRBL
+from unittest.mock import Mock
 
 from enum import Enum
 class ResponseId(Enum):
@@ -16,12 +18,18 @@ class CommandId(Enum):
 
 class InkjetController:
 
+    def connectMotion(self, port):
+        self.motion = GRBL()
+        self.motion.Connect(port)
+
     def openImage(self, path):
          self.imageSlicer = ImageSlicer(path)
 
     def _printSweep(self, sweep):
         index = 0
+        self.array += "{\n"
         for line in sweep:
+            self.array += f"{line},\n"
             success = False
             while not success:
                 success = self.sendOneLine(line)
@@ -30,16 +38,35 @@ class InkjetController:
                     time.sleep(0.02)
                     self.askBufferAvailable()
                     self.waitFor(ResponseId.AVAILABLE_BUFFER.value)
-                print(f"sent line {index}")
+                else:
+                    print(f"sent line {index}")
             index += 1
+        self.array += "},\n"
 
     def print(self):
-        self.startPrint()
+        self.pixel_to_pos_multiplier = 25.4 / self.imageSlicer.dpi()
+        self.motion.setZeros()
         sweep_index = 0
         for sweep in self.imageSlicer.imageSweeps(packed=True):
             print(f"Processing sweep {sweep_index}, lines in sweep : {len(sweep)}")
+            x = self.pixel_to_pos_multiplier*len(sweep) + 10
+            y = -self.pixel_to_pos_multiplier*sweep_index*self.imageSlicer.dpi()/2
+            self.motion.asyncMove(0, y, self.print_velocity)
+            self.motion.waitMotionEnd()
+            self.motion.asyncMove(x, y, self.print_velocity)
+            self.startPrint()
             self._printSweep(sweep)
+            self.motion.waitMotionEnd()
+            self.stopPrint()
+            self.motion.asyncMove(0, y, self.print_velocity*4)
+            self.motion.waitMotionEnd()
             sweep_index += 1
+            sweep.dump(f"ytec{sweep_index}.bin")
+
+        self.motion.asyncMove(0, y, self.print_velocity*4)
+        self.motion.waitMotionEnd()
+        self.motion.asyncMove(0, 0, self.print_velocity*4)
+        self.motion.waitMotionEnd()
 
     def waitFor(self, id):
         while True:
@@ -65,6 +92,7 @@ class InkjetController:
 
     def startPrint(self):
         self.sendEmptyCommand(CommandId.START_PRINT.value)
+        self.array = ""
 
     def stopPrint(self):
         self.sendEmptyCommand(CommandId.STOP_PRINT.value)
@@ -79,7 +107,7 @@ class InkjetController:
         """sends one line, but without checking
         """
         sendSize = 0
-        for elt in line:
+        for elt in line[::-1]:
             sendSize = self.link.tx_obj(elt, start_pos=sendSize, val_type_override='B')
         self.link.send(sendSize, packet_id=CommandId.APPEND.value)
         self.available -= 1
@@ -121,17 +149,20 @@ class InkjetController:
         self.available = 0
         self.askBufferAvailable()
         self.waitFor(ResponseId.AVAILABLE_BUFFER.value)
+        self.motion = Mock()
+        self.print_velocity = 10
 
 if __name__ == '__main__':
     try:
         import sys
         ctl = InkjetController(sys.argv[1])
+        ctl.connectMotion(sys.argv[2])
         time.sleep(2)
         index = 0
-        for _ in range(5):
-            print('prime!')
-            ctl.prime()
-            time.sleep(1)
+        # for _ in range(5):
+        #     print('prime!')
+        #     ctl.prime()
+        #     time.sleep(1)
         #ctl.openImage('test600dpi.png')
         ctl.openImage('ytec_logo_icon.png')
         print("image opened")
