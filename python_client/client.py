@@ -61,7 +61,7 @@ class InkjetController:
             self.motion.asyncMove(0, y, self.print_velocity*4)
             self.motion.waitMotionEnd()
             sweep_index += 1
-            sweep.dump(f"ytec{sweep_index}.bin")
+            # sweep.dump(f"ytec{sweep_index}.bin")
 
         self.motion.asyncMove(0, y, self.print_velocity*4)
         self.motion.waitMotionEnd()
