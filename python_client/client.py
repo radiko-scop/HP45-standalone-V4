@@ -1,7 +1,8 @@
 import time
 from pySerialTransfer import pySerialTransfer as txfer
 from ImageConverter2 import ImageSlicer
-from OPSerialGRBL import GRBL
+# from OPSerialGRBL import GRBL
+from SerialMotionCtl import SerialMotionCtl
 from unittest.mock import Mock
 
 from enum import Enum
@@ -19,7 +20,7 @@ class CommandId(Enum):
 class InkjetController:
 
     def connectMotion(self, port):
-        self.motion = GRBL()
+        self.motion = SerialMotionCtl() #GRBL()
         self.motion.Connect(port)
 
     def openImage(self, path):
@@ -45,6 +46,7 @@ class InkjetController:
 
     def print(self):
         self.pixel_to_pos_multiplier = 25.4 / self.imageSlicer.dpi()
+        self.motion.home(100)
         self.motion.setZeros()
         sweep_index = 0
         for sweep in self.imageSlicer.imageSweeps(packed=True):

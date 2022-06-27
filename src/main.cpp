@@ -121,10 +121,6 @@ void appendToBuffer()
     memset(&line, 0, sizeof(line));
     uint16_t recSize = 0;
     recSize = myTransfer.rxObj(line.data, recSize);
-    // Serial1.print("Size Received: ");
-    // Serial1.print(recSize);
-    // Serial1.print(" value: ");
-    // Serial1.println(line.data[0]);
     InkJetBuffer.push(line);
 
   }else{
@@ -135,28 +131,6 @@ void appendToBuffer()
     // myTransfer.sendData(sendSize, 0);
   }
 }
-
-// void doSendAvailableSpace(void)
-// {
-//   if(!InkJetBuffer.isEmpty())
-//   {
-//     InkLine currentBurst = InkJetBuffer.shift();
-//     dmaHP45.SetEnable(1); //enable the head
-//     dmaHP45.ConvertB8ToBurst(currentBurst.data, DataBurst);
-//     dmaHP45.SetBurst(DataBurst, 1);
-//     dmaHP45.Burst(); //burst the printhead
-//     Serial1.print("Buuurst ");
-//     Serial1.print(burstCount);
-//     Serial1.println(" !");
-//     burstCount++;
-//   }
-//   // Serial1.println("Returning size !");
-//   // //buffer.burst values if any, zeros else.
-//   // uint16_t sendSize = 0;
-//   // sendSize = myTransfer.txObj<int16_t>(InkJetBuffer.available(), sendSize);
-//   // myTransfer.sendData(sendSize, CODE_BUFFER_AVAILABLE);
-//   // sendAvailableSpace = false;
-// }
 
 // supplied as a reference - persistent allocation required
 const functionPtr callbackArr[] = { appendToBuffer, getBufferAvailable, prime, startPrinting, stopPrinting };
