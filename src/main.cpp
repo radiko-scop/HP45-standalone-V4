@@ -15,6 +15,8 @@ SerialTransfer myTransfer;
 #define ROW_GAP 4050 //the distance in microns between odd and even row in long
 #define ROW_GAP_PX 96
 
+#define TRIGGER_PIN 24
+
 typedef struct InkLine {
   union {
     uint8_t data[38];
@@ -114,6 +116,7 @@ void stopPrinting()
 {
   flushOneByte();
   InkJetBuffer.clear();
+  OddInkJetBuffer.clear();
   printing = false;
   // myTimer.end();
 }
@@ -150,6 +153,37 @@ void appendToBuffer()
 const functionPtr callbackArr[] = { appendToBuffer, getBufferAvailable, prime, startPrinting, stopPrinting, setSpeed };
 ///////////////////////////////////////////////////////////////////
 
+void onTrigger()
+{
+  if(!InkJetBuffer.isEmpty() || !OddInkJetBuffer.isEmpty())
+  {
+
+    dmaHP45.SetEnable(1); //enable the head
+
+    if( !InkJetBuffer.isEmpty())
+    {
+      InkLine currentBurst = InkJetBuffer.shift();
+      OddInkJetBuffer.push(currentBurst);
+      dmaHP45.ConvertB8ToBurst(currentBurst.data, DataBurst, true); // set even values
+    }else{
+      InkLine empty;
+      dmaHP45.ConvertB8ToBurst(empty.data, DataBurst, true); // set odd values
+    }
+
+    if( (positionPx >= ROW_GAP_PX) && !OddInkJetBuffer.isEmpty())
+    {
+      InkLine oddCurrentBurst = OddInkJetBuffer.shift();
+      dmaHP45.ConvertB8ToBurst(oddCurrentBurst.data, DataBurst, false); // set odd values
+    }else{
+      InkLine empty;
+      dmaHP45.ConvertB8ToBurst(empty.data, DataBurst, false); // set odd values
+    }
+    dmaHP45.SetBurst(DataBurst, 1);
+    dmaHP45.Burst(); //burst the printhead
+    positionPx++;
+  }
+}
+
 void setup()
 {
   dmaHP45.begin();
@@ -166,49 +200,37 @@ void setup()
 
   myTransfer.begin(Serial, myConfig);
 
+  pinMode(TRIGGER_PIN, INPUT);
+  // pinMode(TRIGGER_PIN, OUTPUT);
+  // digitalWrite(TRIGGER_PIN, LOW);
+
+  // attachInterrupt(digitalPinToInterrupt(TRIGGER_PIN), onTrigger, RISING);
+
   // Serial1.println(F("Ready - setup finished"));
   printing = true;
 }
 
+
+uint8_t lastState = HIGH;
 void loop()
 {
   // noInterrupts();
   myTransfer.tick();
   // interrupts();
-
-  if (printing && ((micros() - inkjetLastBurst) > PixelPeriodMicros)) { //if burst is required again based on time (updated regradless of burst conditions)
-    inkjetLastBurst = micros();
-    if(!InkJetBuffer.isEmpty() || !OddInkJetBuffer.isEmpty())
+  uint8_t state = digitalRead(TRIGGER_PIN);
+  if(state != lastState )
+  {
+    if(printing)
     {
-
-      dmaHP45.SetEnable(1); //enable the head
-
-
-
-      if( !InkJetBuffer.isEmpty())
-      {
-        InkLine currentBurst = InkJetBuffer.shift();
-        OddInkJetBuffer.push(currentBurst);
-        dmaHP45.ConvertB8ToBurst(currentBurst.data, DataBurst, true); // set even values
-      }else{
-        InkLine empty;
-        dmaHP45.ConvertB8ToBurst(empty.data, DataBurst, true); // set odd values
-      }
-
-      if( (positionPx >= ROW_GAP_PX) && !OddInkJetBuffer.isEmpty())
-      {
-        InkLine oddCurrentBurst = OddInkJetBuffer.shift();
-        dmaHP45.ConvertB8ToBurst(oddCurrentBurst.data, DataBurst, false); // set odd values
-      }else{
-        InkLine empty;
-        dmaHP45.ConvertB8ToBurst(empty.data, DataBurst, false); // set odd values
-      }
-      dmaHP45.SetBurst(DataBurst, 1);
-      dmaHP45.Burst(); //burst the printhead
-      positionPx++;
+      onTrigger();
+      lastState = state;
     }
   }
-  else {
-    // dmaHP45.SetEnable(0); //disable the head
-  }
+  // if (printing && ((micros() - inkjetLastBurst) > PixelPeriodMicros)) { //if burst is required again based on time (updated regradless of burst conditions)
+  //   inkjetLastBurst = micros();
+  //   onTrigger();
+  // }
+  // else {
+  //   // dmaHP45.SetEnable(0); //disable the head
+  // }
 }

@@ -46,6 +46,7 @@ class InkjetController:
         self.array += "},\n"
 
     def print(self):
+        self.motion.asyncMove(30, 100.0, Axis.Y)
         self.pixel_to_pos_multiplier = 25.4 / self.imageSlicer.dpi()
         self.setSpeed(self.print_velocity)
         self.motion.home(100)
@@ -59,8 +60,8 @@ class InkjetController:
             y = self.pixel_to_pos_multiplier*sweep_index*self.imageSlicer.dpi()/2
             self.motion.asyncMove( y, self.print_velocity, Axis.Y)
             self.motion.waitMotionEnd()
-            self.motion.asyncMove( x, self.print_velocity, Axis.X)
             self.startPrint()
+            self.motion.asyncMove( x, self.print_velocity, Axis.X)
             self._printSweep(sweep)
             self.motion.waitMotionEnd()
             self.stopPrint()
@@ -162,6 +163,9 @@ class InkjetController:
         self.motion = Mock()
         self.print_velocity = 20
 
+    def setPrintSpeed(self, speed):
+        self.print_velocity = speed
+
 if __name__ == '__main__':
     try:
         import sys
@@ -170,6 +174,7 @@ if __name__ == '__main__':
             exit(1)
         ctl = InkjetController(sys.argv[1])
         ctl.connectMotion(sys.argv[2])
+        ctl.setPrintSpeed(sys.argv[3])
         time.sleep(0.5)
         index = 0
         # for _ in range(5):
