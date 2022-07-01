@@ -19,7 +19,7 @@
 #controller
 #Todo:
 #-error lock, stop sending code if errors occur
-#-add get and set grbl $ settings
+#-add get and set grbl $ settingsu
 #-check settings to list of required settings
 #-auto set settings if different
 #-add endstops to pistons, not to home, but to check end (0) reached

@@ -2,7 +2,7 @@ import time
 from pySerialTransfer import pySerialTransfer as txfer
 from ImageConverter2 import ImageSlicer
 # from OPSerialGRBL import GRBL
-from SerialMotionCtl import SerialMotionCtl
+from SerialMotionCtl import SerialMotionCtl, Axis
 from unittest.mock import Mock
 
 from enum import Enum
@@ -15,6 +15,7 @@ class CommandId(Enum):
     PRIME = 2
     START_PRINT = 3
     STOP_PRINT = 4
+    SET_SPEED = 5
 
 
 class InkjetController:
@@ -46,29 +47,32 @@ class InkjetController:
 
     def print(self):
         self.pixel_to_pos_multiplier = 25.4 / self.imageSlicer.dpi()
+        self.setSpeed(self.print_velocity)
         self.motion.home(100)
         self.motion.setZeros()
+        sheet_start = 80 # sheet is 100mm away from homing position for b&w cardridge
+        self.motion.asyncMove(sheet_start, self.print_velocity*4, Axis.X) # brings the cardridge over
         sweep_index = 0
         for sweep in self.imageSlicer.imageSweeps(packed=True):
             print(f"Processing sweep {sweep_index}, lines in sweep : {len(sweep)}")
-            x = self.pixel_to_pos_multiplier*len(sweep) + 10
-            y = -self.pixel_to_pos_multiplier*sweep_index*self.imageSlicer.dpi()/2
-            self.motion.asyncMove(0, y, self.print_velocity)
+            x = sheet_start + self.pixel_to_pos_multiplier*len(sweep)
+            y = self.pixel_to_pos_multiplier*sweep_index*self.imageSlicer.dpi()/2
+            self.motion.asyncMove( y, self.print_velocity, Axis.Y)
             self.motion.waitMotionEnd()
-            self.motion.asyncMove(x, y, self.print_velocity)
+            self.motion.asyncMove( x, self.print_velocity, Axis.X)
             self.startPrint()
             self._printSweep(sweep)
             self.motion.waitMotionEnd()
             self.stopPrint()
-            self.motion.asyncMove(0, y, self.print_velocity*4)
+            self.motion.asyncMove( sheet_start, self.print_velocity*4, Axis.X)
             self.motion.waitMotionEnd()
             sweep_index += 1
             # sweep.dump(f"ytec{sweep_index}.bin")
 
-        self.motion.asyncMove(0, y, self.print_velocity*4)
+        self.motion.asyncMove( y, self.print_velocity*4, Axis.Y)
         self.motion.waitMotionEnd()
-        self.motion.asyncMove(0, 0, self.print_velocity*4)
-        self.motion.waitMotionEnd()
+        # self.motion.asyncMove( 0, self.print_velocity*4, Axis.Y)
+        # self.motion.waitMotionEnd()
 
     def waitFor(self, id):
         while True:
@@ -123,6 +127,10 @@ class InkjetController:
         self.forceSendOneLine(line)
         return True
 
+    def setSpeed(self, mm_s):
+        sendSize = self.link.tx_obj(mm_s, start_pos=0, val_type_override='f')
+        self.link.send(sendSize, packet_id=CommandId.SET_SPEED.value)
+
     def availableBufferCallback(self):
         self.available = self.link.rx_obj(obj_type='h', start_pos=0)
         print('ATMEGA says there are {} lines available left in buffer'.format(self.available))
@@ -152,14 +160,17 @@ class InkjetController:
         self.askBufferAvailable()
         self.waitFor(ResponseId.AVAILABLE_BUFFER.value)
         self.motion = Mock()
-        self.print_velocity = 10
+        self.print_velocity = 20
 
 if __name__ == '__main__':
     try:
         import sys
+        if len(sys.argv) != 4:
+            print("Usage: python client.py <cardridge UART> <motion UART> <speed mm/s>\n example: python client.py /dev/ttyACM0 /dev/ttyUSB0 100")
+            exit(1)
         ctl = InkjetController(sys.argv[1])
         ctl.connectMotion(sys.argv[2])
-        time.sleep(2)
+        time.sleep(0.5)
         index = 0
         # for _ in range(5):
         #     print('prime!')
@@ -191,5 +202,3 @@ if __name__ == '__main__':
     except:
         import traceback
         traceback.print_exc()
-
-        ctl.close()
