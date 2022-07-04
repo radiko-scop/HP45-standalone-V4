@@ -34,6 +34,7 @@ class InkjetController:
         for index, line in enumerate(sweep):
             if not self.sendOneLine(line):
                 return index
+        return len(sweep) -1
 
     def _printSweep(self, sweep, sweep_end_pos):
         """send sweep line by line
@@ -45,6 +46,7 @@ class InkjetController:
         self.askBufferAvailable()
         self.waitFor(ResponseId.AVAILABLE_BUFFER.value)
         currentSweepIndex = self._fillBuffer(sweep)
+        print(f"buffer index : {currentSweepIndex}")
         self.motion.asyncMove(sweep_end_pos, self.print_velocity, Axis.X)
         for line in sweep[currentSweepIndex::]:
             success = False
@@ -59,6 +61,7 @@ class InkjetController:
 
     def print(self):
         print("first move")
+        self.motion.setZeros()
         self.motion.asyncMove(30, 100.0, Axis.Y)
         self.motion.waitMotionEnd()
         print("next")

@@ -36,8 +36,8 @@ uint16_t DataBurst[22]; //the printing burst for decoding
  * - buffer.shift(); object from it each time you advance one pixel
  *
  */
-CircularBuffer<InkLine, 3000> InkJetBuffer;
-CircularBuffer<InkLine, 3000> OddInkJetBuffer;
+CircularBuffer<InkLine, 5000> InkJetBuffer;
+CircularBuffer<InkLine, 1000> OddInkJetBuffer;
 
 //for DMA
 const uint32_t dmaBufferSize = 320; //242 max theoretical, the actual size of the DMA buffer (takes data per 2 bytes, 1 per port)
