@@ -27,32 +27,51 @@ class InkjetController:
     def openImage(self, path):
          self.imageSlicer = ImageSlicer(path)
 
-    def _printSweep(self, sweep):
-        index = 0
-        self.array += "{\n"
-        for line in sweep:
-            self.array += f"{line},\n"
+
+    def _fillBuffer(self, sweep):
+        """Fill print buffer until it fails to do so. Then return index it managed to fill
+        """
+        for index, line in enumerate(sweep):
+            if not self.sendOneLine(line):
+                return index
+
+    def _printSweep(self, sweep, sweep_end_pos):
+        """send sweep line by line
+
+        Args:
+            sweep (_type_): an array
+            sweep_end_pos (_type_): position of the end of the switch
+        """
+        self.askBufferAvailable()
+        self.waitFor(ResponseId.AVAILABLE_BUFFER.value)
+        currentSweepIndex = self._fillBuffer(sweep)
+        self.motion.asyncMove(sweep_end_pos, self.print_velocity, Axis.X)
+        for line in sweep[currentSweepIndex::]:
             success = False
             while not success:
                 success = self.sendOneLine(line)
                 if not success:
-                    print("fail ...")
-                    time.sleep(0.02)
+                    time.sleep(0.1)
                     self.askBufferAvailable()
                     self.waitFor(ResponseId.AVAILABLE_BUFFER.value)
-                else:
-                    print(f"sent line {index}")
-            index += 1
-        self.array += "},\n"
+                # else:
+                #     print(f"sent line {index}")
 
     def print(self):
+        print("first move")
         self.motion.asyncMove(30, 100.0, Axis.Y)
+        self.motion.waitMotionEnd()
+        print("next")
         self.pixel_to_pos_multiplier = 25.4 / self.imageSlicer.dpi()
         self.setSpeed(self.print_velocity)
         self.motion.home(100)
+        print("homed")
         self.motion.setZeros()
-        sheet_start = 80 # sheet is 100mm away from homing position for b&w cardridge
+        sheet_start = 90.0 #90 # sheet is 100mm away from homing position for b&w cardridge
         self.motion.asyncMove(sheet_start, self.print_velocity*4, Axis.X) # brings the cardridge over
+        print("sent motion")
+        self.motion.waitMotionEnd()
+        print("Cardridge in position")
         sweep_index = 0
         for sweep in self.imageSlicer.imageSweeps(packed=True):
             print(f"Processing sweep {sweep_index}, lines in sweep : {len(sweep)}")
@@ -61,14 +80,14 @@ class InkjetController:
             self.motion.asyncMove( y, self.print_velocity, Axis.Y)
             self.motion.waitMotionEnd()
             self.startPrint()
-            self.motion.asyncMove( x, self.print_velocity, Axis.X)
-            self._printSweep(sweep)
+            self._printSweep(sweep, x)
             self.motion.waitMotionEnd()
             self.stopPrint()
             self.motion.asyncMove( sheet_start, self.print_velocity*4, Axis.X)
             self.motion.waitMotionEnd()
             sweep_index += 1
-            # sweep.dump(f"ytec{sweep_index}.bin")
+
+            # sweep.dump(f"ytec{sweep_index}.bi)
 
         self.motion.asyncMove( y, self.print_velocity*4, Axis.Y)
         self.motion.waitMotionEnd()
@@ -99,7 +118,6 @@ class InkjetController:
 
     def startPrint(self):
         self.sendEmptyCommand(CommandId.START_PRINT.value)
-        self.array = ""
 
     def stopPrint(self):
         self.sendEmptyCommand(CommandId.STOP_PRINT.value)
@@ -174,7 +192,7 @@ if __name__ == '__main__':
             exit(1)
         ctl = InkjetController(sys.argv[1])
         ctl.connectMotion(sys.argv[2])
-        ctl.setPrintSpeed(sys.argv[3])
+        ctl.setPrintSpeed(float(sys.argv[3]))
         time.sleep(0.5)
         index = 0
         # for _ in range(5):

@@ -18,14 +18,7 @@ SerialTransfer myTransfer;
 #define TRIGGER_PIN 24
 
 typedef struct InkLine {
-  union {
-    uint8_t data[38];
-
-    struct {
-      uint8_t odd:1;
-      uint8_t even:1;
-    } bitpair[152];
-  };
+  uint8_t data[38];
   InkLine()
   {
     memset(data, 0, sizeof(data));
@@ -43,8 +36,8 @@ uint16_t DataBurst[22]; //the printing burst for decoding
  * - buffer.shift(); object from it each time you advance one pixel
  *
  */
-CircularBuffer<InkLine, 300> InkJetBuffer;
-CircularBuffer<InkLine, 300> OddInkJetBuffer;
+CircularBuffer<InkLine, 3000> InkJetBuffer;
+CircularBuffer<InkLine, 3000> OddInkJetBuffer;
 
 //for DMA
 const uint32_t dmaBufferSize = 320; //242 max theoretical, the actual size of the DMA buffer (takes data per 2 bytes, 1 per port)
@@ -107,6 +100,7 @@ void startPrinting()
 {
   flushOneByte(); // always one byte of payload, even if unused...
   // Serial1.println("Starting printing");
+  dmaHP45.SetEnable(1); //enable the head
   printing = true;
   positionPx = 0;
   // myTimer.begin(setAvailableSpaceFlag, PixelPeriod);
@@ -115,6 +109,7 @@ void startPrinting()
 void stopPrinting()
 {
   flushOneByte();
+  dmaHP45.SetEnable(0);
   InkJetBuffer.clear();
   OddInkJetBuffer.clear();
   printing = false;
@@ -141,7 +136,7 @@ void appendToBuffer()
     InkJetBuffer.push(line);
 
   }else{
-    // Serial1.println("Error appending to buffer !!!");
+    Serial1.println("Buffer full !!!");
 
     // uint16_t sendSize = 0;
     // sendSize = myTransfer.txObj<int16_t>(-1, sendSize);
@@ -155,7 +150,7 @@ const functionPtr callbackArr[] = { appendToBuffer, getBufferAvailable, prime, s
 
 void onTrigger()
 {
-  if(!InkJetBuffer.isEmpty() || !OddInkJetBuffer.isEmpty())
+  if(!InkJetBuffer.isEmpty()) // || !OddInkJetBuffer.isEmpty())
   {
 
     dmaHP45.SetEnable(1); //enable the head
@@ -170,17 +165,19 @@ void onTrigger()
       dmaHP45.ConvertB8ToBurst(empty.data, DataBurst, true); // set odd values
     }
 
-    if( (positionPx >= ROW_GAP_PX) && !OddInkJetBuffer.isEmpty())
-    {
-      InkLine oddCurrentBurst = OddInkJetBuffer.shift();
-      dmaHP45.ConvertB8ToBurst(oddCurrentBurst.data, DataBurst, false); // set odd values
-    }else{
+    // if( (positionPx >= ROW_GAP_PX) && !OddInkJetBuffer.isEmpty())
+    // {
+    //   InkLine oddCurrentBurst = OddInkJetBuffer.shift();
+    //   dmaHP45.ConvertB8ToBurst(oddCurrentBurst.data, DataBurst, false); // set odd values
+    // }else{
       InkLine empty;
       dmaHP45.ConvertB8ToBurst(empty.data, DataBurst, false); // set odd values
-    }
+    // }
     dmaHP45.SetBurst(DataBurst, 1);
     dmaHP45.Burst(); //burst the printhead
     positionPx++;
+  }else{
+    Serial1.println("Trying to print but Buffer are empty !!");
   }
 }
 
@@ -189,7 +186,7 @@ void setup()
   dmaHP45.begin();
 
   Serial.begin(115200);
-  // Serial1.begin(115200);
+  Serial1.begin(115200);
 
   ///////////////////////////////////////////////////////////////// Config Parameters
   configST myConfig;
@@ -207,7 +204,7 @@ void setup()
   // attachInterrupt(digitalPinToInterrupt(TRIGGER_PIN), onTrigger, RISING);
 
   // Serial1.println(F("Ready - setup finished"));
-  printing = true;
+  printing = false;
 }
 
 
@@ -222,6 +219,13 @@ void loop()
   {
     if(printing)
     {
+      if((micros() - inkjetLastBurst) > (PixelPeriodMicros+700))
+      {
+        Serial1.print(micros() - inkjetLastBurst);
+        Serial1.print("ms elapsed instead of ");
+        Serial1.println(PixelPeriodMicros);
+      }
+      inkjetLastBurst = micros();
       onTrigger();
       lastState = state;
     }
