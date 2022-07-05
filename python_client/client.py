@@ -63,15 +63,17 @@ class InkjetController:
         print("first move")
         self.motion.setZeros()
         self.motion.asyncMove(30, 100.0, Axis.Y)
+        print("moving to 30")
         self.motion.waitMotionEnd()
         print("next")
         self.pixel_to_pos_multiplier = 25.4 / self.imageSlicer.dpi()
         self.setSpeed(self.print_velocity)
         self.motion.home(100)
+        self.motion.waitMotionEnd()
         print("homed")
         self.motion.setZeros()
-        sheet_start = 90.0 #90 # sheet is 100mm away from homing position for b&w cardridge
-        self.motion.asyncMove(sheet_start, self.print_velocity*4, Axis.X) # brings the cardridge over
+        sheet_start = 85.0 #90 # sheet is 100mm away from homing position for b&w cardridge
+        self.motion.asyncMove(sheet_start, self.print_velocity, Axis.X) # brings the cardridge over
         print("sent motion")
         self.motion.waitMotionEnd()
         print("Cardridge in position")
@@ -81,18 +83,19 @@ class InkjetController:
             x = sheet_start + self.pixel_to_pos_multiplier*len(sweep)
             y = self.pixel_to_pos_multiplier*sweep_index*self.imageSlicer.dpi()/2
             self.motion.asyncMove( y, self.print_velocity, Axis.Y)
+            print(f"moving to {y}")
             self.motion.waitMotionEnd()
             self.startPrint()
             self._printSweep(sweep, x)
             self.motion.waitMotionEnd()
             self.stopPrint()
-            self.motion.asyncMove( sheet_start, self.print_velocity*4, Axis.X)
+            self.motion.asyncMove( sheet_start, self.print_velocity, Axis.X)
             self.motion.waitMotionEnd()
             sweep_index += 1
 
             # sweep.dump(f"ytec{sweep_index}.bi)
 
-        self.motion.asyncMove( y, self.print_velocity*4, Axis.Y)
+        self.motion.asyncMove( y, self.print_velocity, Axis.Y)
         self.motion.waitMotionEnd()
         # self.motion.asyncMove( 0, self.print_velocity*4, Axis.Y)
         # self.motion.waitMotionEnd()
