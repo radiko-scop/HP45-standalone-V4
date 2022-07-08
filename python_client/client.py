@@ -4,6 +4,7 @@ from ImageConverter2 import ImageSlicer
 # from OPSerialGRBL import GRBL
 from SerialMotionCtl import SerialMotionCtl, Axis
 from unittest.mock import Mock
+import numpy as np
 
 from enum import Enum
 class ResponseId(Enum):
@@ -46,18 +47,70 @@ class InkjetController:
         self.askBufferAvailable()
         self.waitFor(ResponseId.AVAILABLE_BUFFER.value)
         currentSweepIndex = self._fillBuffer(sweep)
+        self.askBufferAvailable()
+        self.waitFor(ResponseId.AVAILABLE_BUFFER.value)
         print(f"buffer index : {currentSweepIndex}")
         self.motion.asyncMove(sweep_end_pos, self.print_velocity, Axis.X)
-        for line in sweep[currentSweepIndex::]:
-            success = False
-            while not success:
-                success = self.sendOneLine(line)
-                if not success:
-                    time.sleep(0.1)
-                    self.askBufferAvailable()
-                    self.waitFor(ResponseId.AVAILABLE_BUFFER.value)
+        # for line in sweep[currentSweepIndex::]:
+        #     success = False
+        #     while not success:
+        #         success = self.sendOneLine(line)
+        #         if not success:
+        #             print("Whaaaaat ?")
+        #             time.sleep(0.1)
+        #             self.askBufferAvailable()
+        #             self.waitFor(ResponseId.AVAILABLE_BUFFER.value)
                 # else:
                 #     print(f"sent line {index}")
+
+
+    def cleanSweep(self, sweep):
+        pxpos = 133 # swap with 169 ?
+        sweep[::, pxpos] = 0
+        pxpos = 267 # swap with 295 ?
+        sweep[::, pxpos] = 0
+        # pxpos = 2
+        # sweep[::, pxpos] = 1
+        return sweep
+
+    def createDetectorSweep(self):
+        sweep = np.ones((4500, 300))
+        segment_length = 15
+        for i in range(0,300):
+            sweep[i*segment_length:(i*segment_length + segment_length), i] = 0
+        sweep[::, i] = 0 # first line printed black
+        print(f"line {i} in black")
+        sweep = self.cleanSweep(sweep)
+
+        return np.packbits(sweep.astype(bool)^True, axis=1)
+
+    def printSwappedPixelDetector(self):
+        """Print a mire to detect swapped pixels
+        """
+        self.motion.setZeros()
+        self.motion.asyncMove(10, 100.0, Axis.Y)
+        self.motion.waitMotionEnd()
+        self.pixel_to_pos_multiplier = 25.4 / self.imageSlicer.dpi()
+        self.setSpeed(self.print_velocity)
+        self.motion.home(100)
+        self.motion.waitMotionEnd()
+        self.motion.setZeros()
+        sheet_start = 90.0 #90 # sheet is 100mm away from homing position for b&w cardridge
+        self.motion.asyncMove(sheet_start, self.print_velocity, Axis.X) # brings the cardridge over
+        self.motion.waitMotionEnd()
+        self.prime()
+        self.motion.asyncMove(15, 100.0, Axis.Y)
+        self.motion.waitMotionEnd()
+        self.motion.setZeros()
+        self.startPrint()
+        sweep = self.createDetectorSweep()
+        x = sheet_start + self.pixel_to_pos_multiplier*len(sweep)
+        self._printSweep(sweep, x)
+        self.motion.waitMotionEnd()
+        self.stopPrint()
+        self.motion.asyncMove( sheet_start, self.print_velocity, Axis.X)
+        self.motion.waitMotionEnd()
+
 
     def print(self):
         print("first move")
@@ -78,9 +131,15 @@ class InkjetController:
         self.motion.waitMotionEnd()
         print("Cardridge in position")
         sweep_index = 0
-        for sweep in self.imageSlicer.imageSweeps(packed=True):
+        for sweep in self.imageSlicer.imageSweeps(packed=False):
+            sweep = self.cleanSweep(sweep)
+            if sweep_index%2 == 0:
+                sweep = np.flip(sweep, axis=0)
+                x = sheet_start
+            else:
+                x = sheet_start + self.pixel_to_pos_multiplier*len(sweep)
+            sweep = np.packbits(sweep, axis=1)
             print(f"Processing sweep {sweep_index}, lines in sweep : {len(sweep)}")
-            x = sheet_start + self.pixel_to_pos_multiplier*len(sweep)
             y = self.pixel_to_pos_multiplier*sweep_index*self.imageSlicer.dpi()/2
             self.motion.asyncMove( y, self.print_velocity, Axis.Y)
             print(f"moving to {y}")
@@ -89,8 +148,8 @@ class InkjetController:
             self._printSweep(sweep, x)
             self.motion.waitMotionEnd()
             self.stopPrint()
-            self.motion.asyncMove( sheet_start, self.print_velocity, Axis.X)
-            self.motion.waitMotionEnd()
+            # self.motion.asyncMove( sheet_start, self.print_velocity, Axis.X)
+            # self.motion.waitMotionEnd()
             sweep_index += 1
 
             # sweep.dump(f"ytec{sweep_index}.bi)
@@ -209,8 +268,9 @@ if __name__ == '__main__':
         # ctl.openImage('ytec_logo_icon.png')
         ctl.openImage('page_test.png')
         print("image opened")
-        ctl.print()
-
+        #ctl.print()
+        ctl.printSwappedPixelDetector()
+        # # sweep = ctl.createDetectorSweep()
         # ctl.startPrint()
         # while True:
         #     for i in range(255):

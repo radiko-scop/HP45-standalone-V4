@@ -148,6 +148,9 @@ void appendToBuffer()
 const functionPtr callbackArr[] = { appendToBuffer, getBufferAvailable, prime, startPrinting, stopPrinting, setSpeed };
 ///////////////////////////////////////////////////////////////////
 
+InkLine oddCurrentBurst;
+InkLine currentBurst;
+InkLine empty;
 void onTrigger()
 {
   if(!InkJetBuffer.isEmpty()) // || !OddInkJetBuffer.isEmpty())
@@ -157,21 +160,19 @@ void onTrigger()
 
     if( !InkJetBuffer.isEmpty())
     {
-      InkLine currentBurst = InkJetBuffer.shift();
-      OddInkJetBuffer.push(currentBurst);
+      currentBurst = InkJetBuffer.shift();
+      // OddInkJetBuffer.push(currentBurst);
       dmaHP45.ConvertB8ToBurst(currentBurst.data, DataBurst, true); // set even values
     }else{
-      InkLine empty;
-      dmaHP45.ConvertB8ToBurst(empty.data, DataBurst, true); // set odd values
+      dmaHP45.ConvertB8ToBurst(empty.data, DataBurst, true); // set even values
     }
 
     // if( (positionPx >= ROW_GAP_PX) && !OddInkJetBuffer.isEmpty())
     // {
-    //   InkLine oddCurrentBurst = OddInkJetBuffer.shift();
+    //   oddCurrentBurst = OddInkJetBuffer.shift();
     //   dmaHP45.ConvertB8ToBurst(oddCurrentBurst.data, DataBurst, false); // set odd values
     // }else{
-      InkLine empty;
-      dmaHP45.ConvertB8ToBurst(empty.data, DataBurst, false); // set odd values
+    //   dmaHP45.ConvertB8ToBurst(empty.data, DataBurst, false); // set odd values
     // }
     dmaHP45.SetBurst(DataBurst, 1);
     dmaHP45.Burst(); //burst the printhead
@@ -209,12 +210,13 @@ void setup()
 
 
 uint8_t lastState = HIGH;
+uint8_t state;
 void loop()
 {
   // noInterrupts();
   myTransfer.tick();
   // interrupts();
-  uint8_t state = digitalRead(TRIGGER_PIN);
+  state = digitalRead(TRIGGER_PIN);
   if(state != lastState )
   {
     if(printing)
