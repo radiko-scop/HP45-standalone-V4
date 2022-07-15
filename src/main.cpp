@@ -204,7 +204,7 @@ void setup()
 
   // attachInterrupt(digitalPinToInterrupt(TRIGGER_PIN), onTrigger, RISING);
 
-  // Serial1.println(F("Ready - setup finished"));
+  Serial1.println(F("Ready - setup finished"));
   printing = false;
 }
 
@@ -221,13 +221,13 @@ void loop()
   {
     if(printing)
     {
-      if((micros() - inkjetLastBurst) > (PixelPeriodMicros+700))
-      {
-        Serial1.print(micros() - inkjetLastBurst);
-        Serial1.print("ms elapsed instead of ");
-        Serial1.println(PixelPeriodMicros);
-      }
-      inkjetLastBurst = micros();
+      // if((micros() - inkjetLastBurst) > (PixelPeriodMicros+700))
+      // {
+      //   Serial1.print(micros() - inkjetLastBurst);
+      //   Serial1.print("ms elapsed instead of ");
+      //   Serial1.println(PixelPeriodMicros);
+      // }
+      // inkjetLastBurst = micros();
       onTrigger();
       lastState = state;
     }

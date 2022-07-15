@@ -154,10 +154,21 @@ class InkjetController:
 
             # sweep.dump(f"ytec{sweep_index}.bi)
 
-        self.motion.asyncMove( y, self.print_velocity, Axis.Y)
+        self.motion.asyncMove( y+20, self.print_velocity, Axis.Y)
         self.motion.waitMotionEnd()
+        self.cutSheet()
+
         # self.motion.asyncMove( 0, self.print_velocity*4, Axis.Y)
         # self.motion.waitMotionEnd()
+
+    def cutSheet(self):
+        pos = self.motion.position()
+        self.motion.getOrReleaseCutter()
+        self.motion.asyncMove( 40, 100, Axis.X)
+        self.motion.waitMotionEnd()
+        self.motion.getOrReleaseCutter()
+        self.motion.asyncMove( pos, 100, Axis.X)
+        self.motion.waitMotionEnd()
 
     def waitFor(self, id):
         while True:
@@ -268,8 +279,8 @@ if __name__ == '__main__':
         # ctl.openImage('ytec_logo_icon.png')
         ctl.openImage('page_test.png')
         print("image opened")
-        #ctl.print()
-        ctl.printSwappedPixelDetector()
+        ctl.print()
+        #ctl.printSwappedPixelDetector()
         # # sweep = ctl.createDetectorSweep()
         # ctl.startPrint()
         # while True:
